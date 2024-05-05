@@ -53,17 +53,13 @@ int StatedAuto(int bSave)
 	_stprintf(szName, _T("config/games/%s.fs"), BurnDrvGetText(DRV_NAME));
 #endif
 
-	if (bSave == 0)
-	{
+	if (bSave == 0) {
 		printf("loading state %i %s\n", bDrvSaveAll, szName);
 		nRet = BurnStateLoad(szName, bDrvSaveAll, NULL);		// Load ram
-		if (nRet && bDrvSaveAll)
-		{
+		if (nRet && bDrvSaveAll) {
 			nRet = BurnStateLoad(szName, 0, NULL);				// Couldn't get all - okay just try the nvram
 		}
-	}
-	else
-	{
+	} else {
 		printf("saving state %i %s\n", bDrvSaveAll, szName);
 		nRet = BurnStateSave(szName, bDrvSaveAll);				// Save ram
 	}
@@ -133,8 +129,7 @@ unsigned int GetTime(void)
 // If bDraw is true, it's the last frame before we are up to date, and so we should draw the screen
 static int RunFrame(int bDraw, int bPause)
 {
-	if (!bDrvOkay)
-	{
+	if (!bDrvOkay) {
 		return 1;
 	}
 
@@ -144,20 +139,16 @@ static int RunFrame(int bDraw, int bPause)
 	if ((nSlowMo == 1) && ((flippy % 4) == 0)) return 0;		// 75% speed
 	else if ((nSlowMo > 1) && (nSlowMo < 6) && (flippy % ((nSlowMo - 1) * 2)) < (((nSlowMo - 1) * 2) - 1)) return 0;		// 50% and less
 
-	if (bPause)
-	{
+	if (bPause) {
 		InputMake(false);
 		VidPaint(0);
-	}
-	else
-	{
+	} else {
 		nFramesEmulated++;
 		nCurrentFrame++;
 		InputMake(true);
 	}
 
-	if (bDraw)
-	{
+	if (bDraw) {
 		nFramesRendered++;
 
 		if (!bRunAhead || (BurnDrvGetFlags() & BDF_RUNAHEAD_DISABLED) || bAppDoFast) {     // Run-Ahead feature 				-dink aug 02, 2021
@@ -211,20 +202,15 @@ static int RunFrame(int bDraw, int bPause)
 // Callback used when DSound needs more sound
 static int RunGetNextSound(int bDraw)
 {
-	if (nAudNextSound == NULL)
-	{
+	if (nAudNextSound == NULL) {
 		return 1;
 	}
 
-	if (bRunPause)
-	{
-		if (bAppDoStep)
-		{
+	if (bRunPause) {
+		if (bAppDoStep) {
 			RunFrame(bDraw, 0);
 			memset(nAudNextSound, 0, nAudSegLen << 2);                                        // Write silence into the buffer
-		}
-		else
-		{
+		} else {
 			RunFrame(bDraw, 1);
 		}
 
@@ -232,10 +218,8 @@ static int RunGetNextSound(int bDraw)
 		return 0;
 	}
 
-	if (bAppDoFast)
-	{                                            // do more frames
-		for (int i = 0; i < nFastSpeed; i++)
-		{
+	if (bAppDoFast) {                                            // do more frames
+		for (int i = 0; i < nFastSpeed; i++) {
 			RunFrame(0, 0);
 		}
 	}
@@ -243,8 +227,7 @@ static int RunGetNextSound(int bDraw)
 	// Render frame with sound
 	pBurnSoundOut = nAudNextSound;
 	RunFrame(bDraw, 0);
-	if (bAppDoStep)
-	{
+	if (bAppDoStep) {
 		memset(nAudNextSound, 0, nAudSegLen << 2);                // Write silence into the buffer
 	}
 	bAppDoStep = 0;                                              // done one step
@@ -261,20 +244,19 @@ int delay_ticks(int ticks)
 
    startTicks=SDL_GetTicks();
 
-   while (checkTicks <= ticks)
-   {
+   while (checkTicks <= ticks) {
       endTicks=SDL_GetTicks();
       checkTicks = endTicks - startTicks;
    }
 
    return ticks;
 }
+
 int RunIdle()
 {
 	int nTime, nCount;
 
-	if (bAudPlaying)
-	{
+	if (bAudPlaying) {
 		// Run with sound
 		AudSoundCheck();
 		return 0;
@@ -298,8 +280,7 @@ int RunIdle()
 	if (bRunPause) {
 		if (bAppDoStep) {					// Step one frame
 			nCount = 10;
-		}
-		else {
+		} else {
 			RunFrame(1, 1);					// Paused
 			return 0;
 		}
@@ -307,18 +288,14 @@ int RunIdle()
 	bAppDoStep = 0;
 
 
-	if (bAppDoFast)
-	{									// do more frames
-		for (int i = 0; i < nFastSpeed; i++)
-		{
+	if (bAppDoFast) {									// do more frames
+		for (int i = 0; i < nFastSpeed; i++) {
 			RunFrame(0, 0);
 		}
 	}
 
-	if (!bAlwaysDrawFrames)
-	{
-		for (int i = nCount / 10; i > 0; i--)
-		{              // Mid-frames
+	if (!bAlwaysDrawFrames) {
+		for (int i = nCount / 10; i > 0; i--) {              // Mid-frames
 			RunFrame(0, 0);
 		}
 	}
@@ -332,8 +309,7 @@ int RunReset()
 {
 	// Reset the speed throttling code
 	nNormalLast = 0; nNormalFrac = 0;
-	if (!bAudPlaying)
-	{
+	if (!bAudPlaying) {
 		// run without sound
 		nNormalLast = GetTime();
 	}
@@ -374,34 +350,27 @@ void pause_game()
 	}
 
     int finished = 0;
-	while (!finished)
-  	{
+	while (!finished) {
 		starting_stick = SDL_GetTicks();
 
  		SDL_Event e;
 
-		while (SDL_PollEvent(&e))
-		{
-			if (e.type == SDL_QUIT)
-			{
+		while (SDL_PollEvent(&e)) {
+			if (e.type == SDL_QUIT) {
 				finished=1;
 			}
-			if (e.type == SDL_KEYDOWN)
-			{
-			  switch (e.key.keysym.sym)
-			  {
-				  case SDLK_TAB:
-				  case SDLK_p:
-					finished=1;
-					break;
-				  default:
-					break;
-			  }
+			if (e.type == SDL_KEYDOWN) {
+				switch (e.key.keysym.sym) {
+					case SDLK_TAB:
+					case SDLK_p:
+						finished=1;
+						break;
+					default:
+						break;
+				}
 			}
-			if (e.type == SDL_WINDOWEVENT)
-			{ // Window Event
-				switch (e.window.event)
-				{
+			if (e.type == SDL_WINDOWEVENT) { // Window Event
+				switch (e.window.event) {
 					//case SDL_WINDOWEVENT_RESTORED: // keep pause when restore window
 					case SDL_WINDOWEVENT_FOCUS_GAINED:
 						finished=1;
@@ -436,47 +405,40 @@ int RunMessageLoop()
 	RunInit();
 	GameInpCheckMouse();                                                                     // Hide the cursor
 
-	while (!quit)
-	{
+	while (!quit) {
 
 		SDL_Event event;
-		while (SDL_PollEvent(&event))
-		{
-			switch (event.type)
-			{
-			case SDL_QUIT:                                        /* Windows was closed */
-				quit = 1;
-				break;
-
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+				case SDL_QUIT:                                        /* Windows was closed */
+					quit = 1;
+					break;
 #ifdef BUILD_SDL2
-			case SDL_WINDOWEVENT:  // Window Event
-				switch (event.window.event)
-				{
-					case SDL_WINDOWEVENT_MINIMIZED:
-					case SDL_WINDOWEVENT_FOCUS_LOST:
-						pause_game();
-						break;
-				}
-				break;
+				case SDL_WINDOWEVENT:  // Window Event
+					switch (event.window.event) {
+						case SDL_WINDOWEVENT_MINIMIZED:
+						case SDL_WINDOWEVENT_FOCUS_LOST:
+							pause_game();
+							break;
+					}
+					break;
 #endif
 
 			case SDL_KEYDOWN:                                                // need to find a nicer way of doing this...
-				switch (event.key.keysym.sym)
-				{
-				case SDLK_F1:
-					bAppDoFast = 1;
-					break;
-				case SDLK_F9:
-					QuickState(0);
-					break;
-				case SDLK_F10:
-					QuickState(1);
-					break;
-				case SDLK_F11:
-					bAppShowFPS = !bAppShowFPS;
+				switch (event.key.keysym.sym) {
+					case SDLK_F1:
+						bAppDoFast = 1;
+						break;
+					case SDLK_F9:
+						QuickState(0);
+						break;
+					case SDLK_F10:
+						QuickState(1);
+						break;
+					case SDLK_F11:
+						bAppShowFPS = !bAppShowFPS;
 #ifdef BUILD_SDL2
-					if (!bAppShowFPS)
-					{
+					if (!bAppShowFPS) {
 						sprintf(Windowtitle, "FBNeo - %s - %s", BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
 						SDL_SetWindowTitle(sdlWindow, Windowtitle);
 					}
@@ -493,8 +455,7 @@ int RunMessageLoop()
 					break;
 
 				case SDLK_RETURN:
-					if (event.key.keysym.mod & KMOD_ALT)
-					{
+					if (event.key.keysym.mod & KMOD_ALT) {
 						SetFullscreen(!GetFullscreen());
 						AdjustImageSize();
 					}
@@ -506,6 +467,7 @@ int RunMessageLoop()
 						bscreenshot = 1;
 					}
 					break;
+
 				case SDLK_KP_MINUS: // volumme -
 					nAudVolume -= 500;
 					if (nAudVolume < 0) {
@@ -514,6 +476,7 @@ int RunMessageLoop()
 					if (AudSoundSetVolume() == 0) {
 					}
 					break;
+
 				case SDLK_KP_PLUS: // volume -+
 					nAudVolume += 500;
 					if (nAudVolume > 10000) {
@@ -522,26 +485,26 @@ int RunMessageLoop()
 					if (AudSoundSetVolume() == 0) {
 					}
 					break;
+
 				default:
 					break;
 				}
 				break;
 
 			case SDL_KEYUP:                                                // need to find a nicer way of doing this...
-				switch (event.key.keysym.sym)
-				{
-				case SDLK_F1:
-					bAppDoFast = 0;
-					break;
-				case SDLK_F6:
-					bscreenshot = 0;
-					break;
-				case SDLK_F12:
-					quit = 1;
-					break;
+				switch (event.key.keysym.sym) {
+					case SDLK_F1:
+						bAppDoFast = 0;
+						break;
+					case SDLK_F6:
+						bscreenshot = 0;
+						break;
+					case SDLK_F12:
+						quit = 1;
+						break;
 
-				default:
-					break;
+					default:
+						break;
 				}
 				break;
 			}
