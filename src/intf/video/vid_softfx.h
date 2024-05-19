@@ -3,7 +3,7 @@
 #ifdef BUILD_WIN32
  #define SOFTFX_ENABLE_DIRECTX
 #endif
-#ifdef BUILD_SDL
+#if defined(BUILD_SDL) || defined(BUILD_SDL2)
  #define SOFTFX_ENABLE_SDL
 #endif
 
