@@ -4,17 +4,15 @@
 #include "vid_softfx.h"
 
 #include <SDL.h>
-#include <SDL_opengl.h>
+#include <SDL_vulkan.h>
+#include <vulkan_helper.h>
 
 extern char videofiltering[3];
-
-static SDL_GLContext glContext = NULL;
 
 static int nInitedSubsytems = 0;
 
 static int nGamesWidth = 0, nGamesHeight = 0; // screen size
 
-static GLint texture_type = GL_UNSIGNED_BYTE;
 extern SDL_Window* sdlWindow;
 
 static unsigned char* texture = NULL;
@@ -32,21 +30,20 @@ static bool bFlipped = false;
 
 static char Windowtitle[512];
 
+
 static int BlitFXExit()
 {
     free(texture);
     free(gamescreen);
 
     SDL_DestroyWindow(sdlWindow);
-    sdlWindow = NULL;
-
-    SDL_GL_DeleteContext(glContext);
-    glContext = NULL;
+    SDL_Vulkan_UnloadLibrary();
 
     nRotateGame = 0;
 
     return 0;
 }
+
 static int GetTextureSize(int Size)
 {
     int nTextureSize = 128;
@@ -114,70 +111,26 @@ static int Exit()
     return 0;
 }
 
-void init_gl()
-{
-#ifdef FBNEO_DEBUG
-    printf("opengl config\n");
-#endif
-    if ((BurnDrvGetFlags() & BDF_16BIT_ONLY) || (nVidImageBPP != 3)) {
-        texture_type = GL_UNSIGNED_SHORT_5_6_5;
-    } else {
-        texture_type = GL_UNSIGNED_BYTE;
+static int HandleVulkanEvents(void* data, SDL_Event* event) {
+    if (event->type == SDL_WINDOWEVENT) {
+        switch(event->window.event) {
+            case SDL_WINDOWEVENT_RESIZED:
+                SDL_Log("Resize event");
+                break;
+            case SDL_WINDOWEVENT_MINIMIZED:
+                SDL_Log("Minimized window");
+                break;
+            case SDL_WINDOWEVENT_RESTORED:
+                SDL_Log("Restored window");
+                break;
+            default:
+                break;
+        }
     }
-
-    glShadeModel(GL_FLAT);
-    glDisable(GL_POLYGON_SMOOTH);
-    glDisable(GL_LINE_SMOOTH);
-    glDisable(GL_POINT_SMOOTH);
-    glDisable(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_TEXTURE_2D);
-    if (strcmp(videofiltering, "0") == 0) {
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    } else {
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    }
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nTextureWidth, nTextureHeight, 0, GL_RGB, texture_type, texture);
-
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-#ifdef FBNEO_DEBUG
-    printf("opengl config done . . . \n");
-#endif
+    return 0;
 }
 
-static void GLAdjustViewport()
-{
-    int w;
-    int h;
-    SDL_GetWindowSize(sdlWindow, &w, &h);
-
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-
-    if (!nRotateGame) {
-        printf("!nRotateGame: %d", nRotateGame);
-        glRotatef((bFlipped ? 180.0 : 0.0), 0.0, 0.0, 1.0);
-        glOrtho(0, nGamesWidth, nGamesHeight, 0, -1, 1);
-        int constrainedHeight = 1.0 / ((w * 1.0 * nGamesHeight) / nGamesWidth);
-        glViewport( 0, h > constrainedHeight ? ((h - constrainedHeight) / 2.0) : 0, w, h > constrainedHeight ? constrainedHeight : h);
-    } else {
-        glRotatef((bFlipped ? 270.0 : 90.0), 0.0, 0.0, 1.0);
-        glOrtho(0, nGamesHeight, nGamesWidth, 0, -1, 1);
-        int constrainedWidth = (1.0 * h * nGamesWidth) / nGamesHeight;
-        glViewport( w > constrainedWidth ? ((w - constrainedWidth) / 2.0) : 0, 0, w > constrainedWidth ? constrainedWidth : w, h);
-    }
-
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-}
-
-int SDLScaleWindow()
+static int SDLScaleWindow()
 {
     Uint32 screenFlags = SDL_GetWindowFlags(sdlWindow);
 
@@ -192,13 +145,16 @@ int SDLScaleWindow()
             int h;
             SDL_GetWindowSize(sdlWindow, &w, &h);
             printf("Rotated Width/Height: %d, %d\n", w, h);
-            SDL_SetWindowSize(sdlWindow, (display_h * (display_w / display_h)) * 2, display_h * 2);
-            SDL_SetWindowFullscreen(sdlWindow, SDL_TRUE);
+            //SDL_SetWindowSize(sdlWindow, (display_h * (display_w / display_h)) * 2, display_h * 2);
+            //SDL_SetWindowFullscreen(sdlWindow, SDL_TRUE);
+            dstrect.x = ((display_w * w / h) - display_w) / 2;
         } else {
-            SDL_RestoreWindow(sdlWindow);
-            SDL_SetWindowSize(sdlWindow, display_w * 2, display_h * 2);
-            SDL_SetWindowFullscreen(sdlWindow, SDL_FALSE);
+            //SDL_RestoreWindow(sdlWindow);
+            //SDL_SetWindowSize(sdlWindow, display_w * 2, display_h * 2);
+            //SDL_SetWindowFullscreen(sdlWindow, SDL_FALSE);
+            dstrect.x = (display_h - display_w) / 2;
         }
+        dstrect.y = (display_w - display_h) / 2;
     } else {
         if (screenFlags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) {
             int w;
@@ -206,28 +162,39 @@ int SDLScaleWindow()
             SDL_GetWindowSize(sdlWindow, &w, &h);
             printf("Unrotated Width/Height: %d, %d\n", w, h);
             //SDL_SetWindowSize(sdlWindow, (display_w * w / h) * 2, display_h * 2);
-            SDL_SetWindowFullscreen(sdlWindow, SDL_TRUE);
+            //SDL_SetWindowFullscreen(sdlWindow, SDL_TRUE);
+            if (display_w < (display_h * w / h)) {
+                dstrect.x = ((display_h * w / h) - display_w) / 2;
+                dstrect.y = 0;
+            } else {
+                dstrect.x = 0;
+                dstrect.y = ((display_w * h / w) - display_h) / 2;
+            }
         } else {
-            SDL_RestoreWindow(sdlWindow);
-            SDL_SetWindowSize(sdlWindow, display_w * 2, display_h * 2);
-            SDL_SetWindowFullscreen(sdlWindow, SDL_FALSE);
+            //SDL_RestoreWindow(sdlWindow);
+            //SDL_SetWindowSize(sdlWindow, display_w * 2, display_h * 2);
+            //SDL_SetWindowFullscreen(sdlWindow, SDL_FALSE);
+            dstrect.x = 0;
+            dstrect.y = 0;
         }
     }
 
     SDL_SetWindowPosition(sdlWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-    GLAdjustViewport();
+    dstrect.w = display_w;
+    dstrect.h = display_h;
 
     return 0;
 }
-
 
 static int Init()
 {
     nInitedSubsytems = SDL_WasInit(SDL_INIT_VIDEO);
 
     if (!(nInitedSubsytems & SDL_INIT_VIDEO)) {
-        SDL_InitSubSystem(SDL_INIT_VIDEO);
+        SDL_Init(SDL_INIT_VIDEO);
     }
+
+    SDL_Vulkan_LoadLibrary(nullptr);
 
     nGamesWidth = nVidImageWidth;
     nGamesHeight = nVidImageHeight;
@@ -253,10 +220,10 @@ static int Init()
         }
     }
 
-    Uint32 screenFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+    Uint32 screenFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
 
     if (bAppFullscreen) {
-        screenFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN;
+        screenFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_FULLSCREEN;
     }
 
     sprintf(Windowtitle, "FBNeo - %s - %s", BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
@@ -264,9 +231,11 @@ static int Init()
     sdlWindow = SDL_CreateWindow(Windowtitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, nGamesWidth, nGamesHeight, screenFlags);
 
     if (sdlWindow == NULL) {
-        printf("OPENGL failed : %s\n", SDL_GetError());
+        printf("SDL window creation failed : %s\n", SDL_GetError());
         return -1;
     }
+
+    SDLScaleWindow();
 
     if (!nRotateGame) {
         nTextureWidth = GetTextureSize(nGamesWidth);
@@ -276,20 +245,29 @@ static int Init()
         nTextureHeight = GetTextureSize(nGamesWidth);
     }
 
-    glContext = SDL_GL_CreateContext(sdlWindow);
 
-    if (glContext == NULL) {
-        printf("OPENGL failed : %s\n", SDL_GetError());
-        return -1;
+    uint32_t extensionCount;
+    const char** extensionNames = 0;
+    SDL_Vulkan_GetInstanceExtensions(sdlWindow, &extensionCount, nullptr);
+    extensionNames = new const char *[extensionCount];
+    SDL_Vulkan_GetInstanceExtensions(sdlWindow, &extensionCount, extensionNames);
+    vkInst = createInstance(extensionCount, extensionNames);
+
+    SDL_Vulkan_CreateSurface(sdlWindow, vkInst, &surface);
+
+    if (SDL_GetError() != NULL) {
+        SDL_Log("Initialized with errors: %s", SDL_GetError());
     }
+
+    int w;
+    int h;
+    SDL_GetWindowSize(sdlWindow, &w, &h);
+
+    VulkanInit(w, h);
+    SDL_AddEventWatch(HandleVulkanEvents, sdlWindow);
 
     // Initialize the buffer surfaces
     BlitFXInit();
-
-    // Init opengl
-    init_gl();
-
-    SDLScaleWindow();
 
     return 0;
 }
@@ -319,43 +297,26 @@ static void SurfToTex()
         ps += nVidImagePitch;
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nTextureWidth, nTextureHeight, 0, GL_RGB, texture_type, texture);
-}
-
-static void TexToQuad()
-{
-    glBegin(GL_QUADS);
-    glTexCoord2f(0, 0);
-    glVertex2i(0, 0);
-    glTexCoord2f(0, 1);
-    glVertex2i(0, nTextureHeight);
-    glTexCoord2f(1, 1);
-    glVertex2i(nTextureWidth, nTextureHeight);
-    glTexCoord2f(1, 0);
-    glVertex2i(nTextureWidth, 0);
-    glEnd();
-    glFinish();
 }
 
 // Paint the BlitFX surface onto the primary surface
 static int Paint(int bValidate)
 {
 
-    SurfToTex();
-    TexToQuad();
 
     if (bAppShowFPS && !bAppFullscreen) {
         sprintf(Windowtitle, "FBNeo - FPS: %s - %s - %s", fpsstring, BurnDrvGetTextA(DRV_NAME), BurnDrvGetTextA(DRV_FULLNAME));
         SDL_SetWindowTitle(sdlWindow, Windowtitle);
     }
-    SDL_GL_SwapWindow(sdlWindow);
-    SDLScaleWindow();
+    //SDLScaleWindow();
+    drawFrame();
 
     return 0;
 }
 
-static int vidScale(RECT*, int, int)
+static int Scale(RECT*, int, int)
 {
+    SDL_Log("Scale Called!!!");
     return 0;
 }
 
@@ -375,4 +336,4 @@ static int GetSettings(InterfaceInfo* pInfo)
 }
 
 // The Video Output plugin:
-struct VidOut VidOutSDL2OpenGL = { Init, Exit, Frame, Paint, vidScale, GetSettings, _T("SDL OpenGL Video output") };
+struct VidOut VidOutSDL2Vulkan = { Init, Exit, Frame, Paint, Scale, GetSettings, _T("SDL Vulkan Video output") };
